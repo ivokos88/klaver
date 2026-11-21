@@ -39,7 +39,7 @@ button.mic.on{background:var(--ok);border-color:var(--ok);color:#06241a}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .letters button{min-width:44px;font-weight:700}
 svg.staff{width:100%;max-height:200px;background:#f7f5ee;border-radius:10px}
-.chips{display:flex;gap:4px;flex-wrap:wrap;margin:8px 0}
+.chips{display:block;margin:8px 0}
 .chip{padding:3px 8px;border-radius:6px;background:#2a303c;font-size:14px}
 .chip.done{background:#215a41}.chip.cur{background:var(--warn);color:#222;font-weight:700}
 select{font:inherit;background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:8px}
@@ -275,9 +275,29 @@ function renderSong(){
   $('restart').onclick=()=>{S.i=0;showNext();setMsg('');};
   showNext();
 }
+function songStaff(seq){
+  const R=8,PITCH=75,last=Math.floor((seq.length-1)/R),row=Math.min(Math.floor(S.i/R),last),rows=[row,row+1].filter(r=>r<=last);
+  let svg=`<svg viewBox="0 0 420 ${26+(rows.length-1)*PITCH+62}" style="width:100%;max-height:100%;background:#f7f5ee;border-radius:10px;display:block">`;
+  rows.forEach((r,k)=>{const T=26+k*PITCH,fade=k?.45:1;
+    svg+=`<g opacity="${fade}">`;
+    for(let i=0;i<5;i++)svg+=`<line x1="14" x2="410" y1="${T+i*8}" y2="${T+i*8}" stroke="#222" stroke-width="1"/>`;
+    svg+=`<line x1="14" x2="14" y1="${T}" y2="${T+32}" stroke="#222" stroke-width="1.5"/>`;
+    svg+=`<text x="410" y="${T-8}" font-size="9" fill="#777" text-anchor="end">RIDA ${r+1}/${last+1}</text>`;
+    for(let j=r*R;j<Math.min(seq.length,(r+1)*R);j++){
+      const m=seq[j],x=48+(j-r*R)*44,[li,ac]=PCI[m%12],oct=Math.floor(m/12)-1,d=oct*7+li,y=T+32-(d-30)*4,cur=j===S.i,c=j<S.i?'#2a9d6f':cur?'#e0245e':'#111';
+      for(let dd=40;dd<=d;dd+=2)svg+=`<line x1="${x-11}" x2="${x+11}" y1="${T+32-(dd-30)*4}" y2="${T+32-(dd-30)*4}" stroke="#222"/>`;
+      if(d<=28)svg+=`<line x1="${x-11}" x2="${x+11}" y1="${T+40}" y2="${T+40}" stroke="#222"/>`;
+      if(cur)svg+=`<circle cx="${x}" cy="${y}" r="11" fill="none" stroke="#e0245e" stroke-width="1.5"/>`;
+      svg+=`<ellipse cx="${x}" cy="${y}" rx="6" ry="4.4" fill="${c}" transform="rotate(-18 ${x} ${y})"/>`;
+      if(ac)svg+=`<text x="${x-18}" y="${y+4}" font-size="11" fill="${c}">♯</text>`;
+      svg+=`<text x="${x-6}" y="${T+56}" font-size="10" fill="${cur?c:'#666'}" font-weight="${cur?700:400}">${NAMES[m%12]}</text>`;
+    }
+    svg+='</g>';});
+  return svg+'</svg>';
+}
 function showNext(){
   const seq=SONGS[S.song]; clearNext();
-  $('chips').innerHTML=seq.map((m,i)=>`<span class="chip ${i<S.i?'done':i===S.i?'cur':''}">${NAMES[m%12]}</span>`).join('');
+  $('chips').innerHTML=songStaff(seq);
   if(S.i<seq.length&&S.hint){keyEls[seq[S.i]].classList.add('next');}
 }
 
