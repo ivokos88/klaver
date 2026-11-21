@@ -52,7 +52,8 @@ label{color:var(--mut);font-size:14px;display:inline-flex;gap:6px;align-items:ce
     <div class="status">
       <span>Kuuldud noot:</span><span class="det" id="det">–</span>
       <div class="meter"><i id="lvl"></i></div>
-      <label><input type="checkbox" id="octFree" checked> Oktavit ei arvesta (mikrofon)</label>
+      <label><input type="checkbox" id="octFree" checked> Oktavit ei arvesta</label>
+      <label>Tundlikkus <input type="range" id="gain" min="1" max="30" value="8" style="width:110px"></label>
     </div>
     <div class="hint" id="micHint">Lülita mikrofon sisse ja mängi päris klaveril ühe noodi kaupa. Äpp kuulab ühte häält korraga (akorde ei tunne ära).</div>
   </div>
@@ -224,14 +225,15 @@ function handle(m,src){
 }
 
 /* ---------- mikrofon + helikõrguse tuvastus (YIN) ---------- */
-let stream=null,an=null,buf=null,raf=0,micOn=false,cand=-1,candN=0,lastFired=-1,prevRms=0,minRms=1;
+let gainNode=null,stream=null,an=null,buf=null,raf=0,micOn=false,cand=-1,candN=0,lastFired=-1,prevRms=0,minRms=1;
 const micBtn=$('micBtn');
+$('gain').oninput=e=>{if(gainNode)gainNode.gain.value=+e.target.value;};
 micBtn.onclick=async()=>{
   if(micOn){stopMic();return;}
   try{
     if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw new Error('nosupport');
-    stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
-    const a=ctx(); const src=a.createMediaStreamSource(stream); an=a.createAnalyser(); an.fftSize=4096; src.connect(an); buf=new Float32Array(an.fftSize);
+    stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:true}});
+    const a=ctx(); const src=a.createMediaStreamSource(stream); an=a.createAnalyser(); an.fftSize=4096; gainNode=a.createGain(); gainNode.gain.value=+$('gain').value; src.connect(gainNode); gainNode.connect(an); buf=new Float32Array(an.fftSize);
     micOn=true; micBtn.classList.add('on'); micBtn.textContent='🎤 Mikrofon: sees'; $('micHint').textContent='Mängi üks noot korraga ja lase tal kõlada. Sama noodi kordamiseks löö klahvi uuesti.'; loop();
   }catch(e){
     $('micHint').textContent=(e.message==='nosupport'||!window.isSecureContext)
@@ -247,7 +249,7 @@ function yin(b,sr){
   let run=0; const cm=new Float32Array(maxT+1); cm[0]=1;
   for(let t=1;t<=maxT;t++){run+=d[t];cm[t]=d[t]*t/(run||1);}
   let tau=-1;
-  for(let t=minT;t<=maxT;t++){ if(cm[t]<0.12){ while(t+1<=maxT&&cm[t+1]<cm[t])t++; tau=t;break; } }
+  for(let t=minT;t<=maxT;t++){ if(cm[t]<0.16){ while(t+1<=maxT&&cm[t+1]<cm[t])t++; tau=t;break; } }
   if(tau<0)return -1;
   const a=cm[tau-1]||cm[tau],c=cm[tau+1]||cm[tau],bq=cm[tau]; const den=2*(2*bq-c-a); const sh=den?(c-a)/den:0;
   return sr/(tau+sh);
@@ -256,10 +258,10 @@ function loop(){
   if(!micOn)return; raf=requestAnimationFrame(loop);
   const now=performance.now(); if(loop.t&&now-loop.t<45)return; loop.t=now;
   an.getFloatTimeDomainData(buf); let s=0; for(let i=0;i<buf.length;i++)s+=buf[i]*buf[i]; const rms=Math.sqrt(s/buf.length);
-  $('lvl').style.width=Math.min(100,rms*600)+'%';
+  $('lvl').style.width=Math.min(100,rms*250)+'%';
   if(now<mutedUntil){cand=-1;candN=0;prevRms=rms;return;}
-  if(rms<0.008){cand=-1;candN=0;lastFired=-1;prevRms=rms;minRms=1;return;}
-  if(rms>prevRms*1.6&&rms>0.02)lastFired=-1; // uus löök
+  if(rms<0.012){cand=-1;candN=0;lastFired=-1;prevRms=rms;minRms=1;return;}
+  if(rms>prevRms*1.5&&rms>0.025)lastFired=-1; // uus löök
   prevRms=rms*0.5+prevRms*0.5;
   const f=yin(buf,ac.sampleRate); if(f<0){cand=-1;candN=0;return;}
   const m=Math.round(69+12*Math.log2(f/440)); if(m<36||m>96)return;
