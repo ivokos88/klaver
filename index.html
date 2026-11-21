@@ -57,6 +57,32 @@ select{font-size:15px;padding:9px}
 @keyframes pop{50%{transform:scale(1.08)}}
 .w.good,.b.good{animation:pop .3s}
 .b.good{background:var(--ok)}
+/* mahub ühele ekraanile */
+html,body{height:100%;overflow:hidden}
+.wrap{height:100vh;height:100dvh;display:flex;flex-direction:column;gap:6px;padding:8px}
+.card{margin-bottom:0;padding:10px}
+.tabs{margin:0;flex-wrap:nowrap}
+.tabs button{flex:1;padding:9px 6px}
+#panel{flex:1;min-height:0;overflow:auto}
+.wrap>.card:last-child{flex:none}
+.kb{height:clamp(110px,24dvh,190px);margin-top:0}
+.wrap>.card:last-child .hint{display:none}
+#micHint{display:none}#micHint.show{display:block}
+.status{gap:6px;font-size:12px}
+@media (max-width:700px){
+  h1{font-size:16px}
+  .wrap{padding:6px;gap:5px}
+  button{padding:8px 10px;font-size:13px}
+  .msg{font-size:17px;min-height:24px;margin:2px 0}
+  .chip{font-size:13px;padding:2px 6px}
+  svg.staff{max-height:24dvh}
+  #panel .hint{display:none}
+  .letters button{min-width:40px;padding:8px 6px;font-size:18px}
+  select{padding:7px;font-size:14px}
+  .det{font-size:24px;min-width:50px}
+  .big{font-size:18px}
+  .card{padding:8px}
+}
 </style>
 </head>
 <body>
@@ -305,7 +331,7 @@ micBtn.onclick=async()=>{
     const a=ctx(); const src=a.createMediaStreamSource(stream); an=a.createAnalyser(); an.fftSize=4096; gainNode=a.createGain(); gainNode.gain.value=+$('gain').value; src.connect(gainNode); gainNode.connect(an); buf=new Float32Array(an.fftSize);
     micOn=true; micBtn.classList.add('on'); micBtn.textContent='🎤 Mikrofon: sees'; $('micHint').textContent='Mängi üks noot korraga ja lase tal kõlada. Sama noodi kordamiseks löö klahvi uuesti.'; loop();
   }catch(e){
-    $('micHint').textContent=(e.message==='nosupport'||!window.isSecureContext)
+    $('micHint').classList.add('show'); $('micHint').textContent=(e.message==='nosupport'||!window.isSecureContext)
       ?'Mikrofon ei tööta selles vaates. Ava see fail otse brauseris (Chrome/Safari) või https-lehelt.'
       :'Mikrofoni luba puudub. Luba brauseris mikrofoni kasutamine ja proovi uuesti.';
   }
