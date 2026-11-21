@@ -40,17 +40,23 @@ label{color:var(--mut);font-size:14px;display:inline-flex;gap:6px;align-items:ce
 .hint{color:var(--mut);font-size:13px}
 .big{font-size:22px;font-weight:700}
 /* lastesõbralik: trükitähed ja suuremad elemendid */
-body{text-transform:uppercase;font-size:18px;letter-spacing:.02em;font-family:"Arial Rounded MT Bold","Trebuchet MS",system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+body{text-transform:uppercase;font-size:16px;letter-spacing:.02em;font-family:"Arial Rounded MT Bold","Trebuchet MS",system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
 input,textarea{text-transform:none}
-button{font-size:17px;padding:12px 16px;font-weight:700}
-select{font-size:17px;padding:10px}
-.w{font-size:15px;font-weight:700}
-.hint{font-size:15px}
-.msg{font-size:22px;min-height:32px}
-.chip{font-size:18px;padding:5px 10px}
-.det{font-size:34px}
-.letters button{min-width:54px;font-size:22px}
-.kb{height:200px}
+button{font-size:15px;padding:10px 14px;font-weight:700}
+select{font-size:15px;padding:9px}
+.w{font-size:13px;font-weight:700}
+.hint{font-size:14px}
+.msg{font-size:19px;min-height:30px}
+.chip{font-size:16px;padding:4px 9px}
+.det{font-size:30px}
+.letters button{min-width:48px;font-size:20px}
+.kb{height:190px}
+.fx{position:fixed;inset:0;pointer-events:none;z-index:50;overflow:hidden}
+.fx span{position:absolute;left:50%;top:55%;font-size:28px;animation:fly 1.3s ease-out forwards}
+@keyframes fly{to{transform:translate(var(--dx),var(--dy)) rotate(var(--r));opacity:0}}
+@keyframes pop{50%{transform:scale(1.08)}}
+.w.good,.b.good{animation:pop .3s}
+.b.good{background:var(--ok)}
 </style>
 </head>
 <body>
@@ -105,6 +111,22 @@ function tone(midi,dur=1.2){
   });
   mutedUntil=performance.now()+dur*700+200;
 }
+
+/* ---------- efektid ---------- */
+const PRAISE=['Tubli!','Suurepärne!','Super!','Vahva!','Täpselt nii!','Hästi tehtud!','Imeline!','Briljantne!','Sa oled täht!','Nii hea!'];
+const EMO=['⭐','🌟','🎉','✨','🎵','🥳','🎶','💫'];
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+const praise=()=>pick(EMO)+' '+pick(PRAISE);
+function burst(n){
+  const box=document.createElement('div'); box.className='fx';
+  for(let i=0;i<n;i++){const sp=document.createElement('span'); sp.textContent=pick(['⭐','🎉','✨','🎵','💫','🎈','🌟','🎊']);
+    const ang=Math.random()*Math.PI*2,d=120+Math.random()*(n>20?380:220);
+    sp.style.setProperty('--dx',Math.cos(ang)*d+'px'); sp.style.setProperty('--dy',(Math.sin(ang)*d-60)+'px'); sp.style.setProperty('--r',(Math.random()*540-270)+'deg');
+    sp.style.fontSize=(20+Math.random()*22)+'px'; box.appendChild(sp);}
+  document.body.appendChild(box); setTimeout(()=>box.remove(),1500);
+}
+function chime(){[72,76,79].forEach((m,i)=>setTimeout(()=>tone(m,.35),i*90));}
+function fanfare(){[60,64,67,72,67,72,76,79,84].forEach((m,i)=>setTimeout(()=>tone(m,.5),i*110));}
 
 /* ---------- klaviatuur ---------- */
 const keyEls={};
@@ -257,16 +279,16 @@ function handle(m,src){
   if(busy)return;
   if(mode==='song'){
     const seq=SONGS[S.song]; if(S.i>=seq.length)return;
-    if(match(seq[S.i],m,src)){S.i++; flash(seq[S.i-1],'good'); showNext(); if(S.i>=seq.length){setMsg('🎉 Valmis! Hästi mängitud.','ok');clearNext();} else setMsg('');}
+    if(match(seq[S.i],m,src)){S.i++; flash(seq[S.i-1],'good'); showNext(); if(S.i>=seq.length){setMsg('🎉 Valmis! Hästi mängitud!','ok');clearNext();fanfare();burst(48);} else {setMsg(praise(),'ok');burst(5);}}
     else {setMsg(`Kuulsin ${NAMES[m%12]}, oodatud ${NAMES[seq[S.i]%12]}`,'bad');}
   }
   if(mode==='read'&&S.cur){
     const ok=(S.cur.midi%12)===(m%12); S.tot++;
-    if(ok){S.ok++;S.streak++;setMsg('✓ Õige! '+LET[S.cur.d%7],'ok');updScore();busy=true;setTimeout(()=>{busy=false;newRead();setMsg('');},700);}
+    if(ok){S.ok++;S.streak++;const big=S.streak%5===0;setMsg(big?'🔥 '+S.streak+' ÕIGET JÄRJEST!':praise()+' '+LET[S.cur.d%7],'ok');updScore();if(big)fanfare();else chime();burst(big?44:10);busy=true;setTimeout(()=>{busy=false;newRead();setMsg('');},700);}
     else{S.streak=0;setMsg(`✗ See oli ${NAMES[m%12]}. Proovi uuesti.`,'bad');updScore();}
   }
   if(mode==='ear'&&S.cur){
-    if(match(S.cur.m,m,src)){S.tot++;if(!S.cur.fail)S.ok++;setMsg('✓ Õige! '+NAMES[S.cur.m%12],'ok');flash(S.cur.m,'good');S.cur=null;const s=$('score');s.textContent=`Esimesel katsel ${S.ok}/${S.tot}`;}
+    if(match(S.cur.m,m,src)){S.tot++;if(!S.cur.fail)S.ok++;setMsg(praise()+' '+NAMES[S.cur.m%12],'ok');flash(S.cur.m,'good');chime();burst(14);S.cur=null;const s=$('score');s.textContent=`Esimesel katsel ${S.ok}/${S.tot}`;}
     else{S.cur.fail=true;setMsg(`✗ See oli ${NAMES[m%12]}. Kuula uuesti ja proovi.`,'bad');flash(m,'bad');}
   }
 }
