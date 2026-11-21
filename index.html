@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="et">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Klaveri õppimine</title>
+<style>
+:root{--bg:#14161c;--card:#1e222b;--line:#2d3340;--fg:#eef0f4;--mut:#9aa3b2;--acc:#5b9dff;--ok:#3ecf8e;--bad:#ff6b6b;--warn:#ffc857}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+.wrap{max-width:900px;margin:0 auto;padding:12px}
+h1{font-size:20px;margin:4px 0 10px}
+.top{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+button{font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:9px 14px;cursor:pointer}
+button:hover{border-color:var(--acc)}
+button.on{background:var(--acc);border-color:var(--acc);color:#fff}
+button.mic.on{background:var(--ok);border-color:var(--ok);color:#06241a}
+.tabs{display:flex;gap:6px;margin:12px 0;flex-wrap:wrap}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+.status{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;color:var(--mut);font-size:14px}
+.det{font-size:28px;font-weight:700;color:var(--fg);min-width:70px}
+.meter{height:6px;background:var(--line);border-radius:3px;overflow:hidden;flex:1;min-width:80px}
+.meter i{display:block;height:100%;width:0;background:var(--ok)}
+.msg{min-height:26px;font-weight:600;margin:6px 0}
+.msg.ok{color:var(--ok)}.msg.bad{color:var(--bad)}
+.kb{position:relative;display:flex;height:170px;user-select:none;touch-action:manipulation;margin-top:8px}
+.w{flex:1;background:#f5f5f2;border:1px solid #333;border-radius:0 0 7px 7px;position:relative;display:flex;align-items:flex-end;justify-content:center;color:#666;font-size:11px;padding-bottom:6px;cursor:pointer}
+.b{position:absolute;top:0;width:5.2%;height:60%;background:#15161a;border-radius:0 0 5px 5px;z-index:2;cursor:pointer;border:1px solid #000}
+.w.act{background:var(--acc)}.b.act{background:var(--acc)}
+.w.next{background:#bfe3c9;box-shadow:inset 0 -8px 0 var(--ok)}.b.next{background:#2f8f63}
+.w.good{background:var(--ok)}.w.bad{background:var(--bad)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.letters button{min-width:44px;font-weight:700}
+svg.staff{width:100%;max-height:200px;background:#f7f5ee;border-radius:10px}
+.chips{display:flex;gap:4px;flex-wrap:wrap;margin:8px 0}
+.chip{padding:3px 8px;border-radius:6px;background:#2a303c;font-size:14px}
+.chip.done{background:#215a41}.chip.cur{background:var(--warn);color:#222;font-weight:700}
+select{font:inherit;background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:8px}
+label{color:var(--mut);font-size:14px;display:inline-flex;gap:6px;align-items:center}
+.hint{color:var(--mut);font-size:13px}
+.big{font-size:22px;font-weight:700}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <h1 style="flex:1;margin:0">🎹 Klaveri õppimine</h1>
+    <button class="mic" id="micBtn">🎤 Mikrofon: väljas</button>
+  </div>
+
+  <div class="card" style="margin-top:10px">
+    <div class="status">
+      <span>Kuuldud noot:</span><span class="det" id="det">–</span>
+      <div class="meter"><i id="lvl"></i></div>
+      <label><input type="checkbox" id="octFree" checked> Oktavit ei arvesta (mikrofon)</label>
+    </div>
+    <div class="hint" id="micHint">Lülita mikrofon sisse ja mängi päris klaveril ühe noodi kaupa. Äpp kuulab ühte häält korraga (akorde ei tunne ära).</div>
+  </div>
+
+  <div class="tabs" id="tabs">
+    <button data-m="free" class="on">Mängi</button>
+    <button data-m="song">Lood</button>
+    <button data-m="read">Noodilugemine</button>
+    <button data-m="ear">Kuulmine</button>
+  </div>
+
+  <div class="card" id="panel"></div>
+
+  <div class="card">
+    <div class="kb" id="kb"></div>
+    <div class="hint" style="margin-top:6px">Klaviatuur C4–H5. Klõpsa või puuduta klahve.</div>
+  </div>
+</div>
+
+<script>
+const NAMES=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','H'];
+const LET=['C','D','E','F','G','A','H'];
+const LET_PC=[0,2,4,5,7,9,11];
+const nm=m=>NAMES[m%12]+(Math.floor(m/12)-1);
+const $=id=>document.getElementById(id);
+const START=60,END=83;
+
+/* ---------- audio (siinus-põhine klaverilaadne heli) ---------- */
+let ac=null,mutedUntil=0;
+function ctx(){ if(!ac){ac=new (window.AudioContext||window.webkitAudioContext)();} if(ac.state==='suspended')ac.resume(); return ac; }
+function tone(midi,dur=1.2){
+  const a=ctx(),f=440*Math.pow(2,(midi-69)/12),t=a.currentTime;
+  const g=a.createGain(); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(.35,t+.008);
+  g.gain.exponentialRampToValueAtTime(.0008,t+dur); g.connect(a.destination);
+  [[1,1],[2,.45],[3,.2],[4,.1]].forEach(([k,v])=>{
+    const o=a.createOscillator(),gg=a.createGain(); o.type='sine'; o.frequency.value=f*k; gg.gain.value=v; o.connect(gg); gg.connect(g); o.start(t); o.stop(t+dur+.05);
+  });
+  mutedUntil=performance.now()+dur*700+200;
+}
+
+/* ---------- klaviatuur ---------- */
+const keyEls={};
+(function buildKb(){
+  const kb=$('kb'); const whites=[]; for(let m=START;m<=END;m++) if(![1,3,6,8,10].includes(m%12)) whites.push(m);
+  whites.forEach(m=>{const d=document.createElement('div');d.className='w';d.textContent=NAMES[m%12]==='C'?nm(m):NAMES[m%12];kb.appendChild(d);keyEls[m]=d;d.dataset.m=m;});
+  const W=100/whites.length;
+  for(let m=START;m<=END;m++) if([1,3,6,8,10].includes(m%12)){
+    const wi=whites.indexOf(m-1); const d=document.createElement('div'); d.className='b'; d.style.left=((wi+1)*W-2.6)+'%'; d.dataset.m=m; kb.appendChild(d); keyEls[m]=d;
+  }
+  kb.addEventListener('pointerdown',e=>{const el=e.target.closest('[data-m]'); if(!el)return; e.preventDefault(); press(+el.dataset.m,'click');});
+})();
+function flash(m,cls){const el=keyEls[m]; if(!el)return; el.classList.add(cls); setTimeout(()=>el.classList.remove(cls),cls==='act'?220:500);}
+function press(m,src){
+  if(src==='click') tone(m);
+  flash(m,'act');
+  handle(m,src);
+}
+const match=(target,m,src)=>(src==='mic'&&$('octFree').checked)||(src==='pc')?(target%12===m%12):(target===m);
+
+/* ---------- režiimid ---------- */
+let mode='free',S={};
+const panel=$('panel');
+function setMsg(t,c){const el=$('msg'); if(el){el.textContent=t;el.className='msg '+(c||'');}}
+function clearNext(){Object.values(keyEls).forEach(e=>e.classList.remove('next'));}
+
+document.getElementById('tabs').addEventListener('click',e=>{const b=e.target.closest('button'); if(!b)return; mode=b.dataset.m; [...$('tabs').children].forEach(x=>x.classList.toggle('on',x===b)); clearNext(); render();});
+
+function render(){
+  if(mode==='free'){
+    panel.innerHTML='<div class="big">Vaba mäng</div><p class="hint">Mängi klahve ekraanil või päris klaveril (mikrofon). Siin näed, millist nooti äpp kuuleb. Alusta sellest: kontrolli, kas äpp tunneb su klaveri noodid õigesti ära.</p>';
+  }
+  if(mode==='song') renderSong();
+  if(mode==='read') renderRead();
+  if(mode==='ear') renderEar();
+}
+
+/* --- Lood --- */
+const SONGS={
+  'Rõõmuoda (Beethoven)':[64,64,65,67,67,65,64,62,60,60,62,64,64,62,62],
+  'Põdra maja – Twinkle':[60,60,67,67,69,69,67,65,65,64,64,62,62,60],
+  'Maril oli väike talle':[64,62,60,62,64,64,64,62,62,62,64,67,67],
+  'Jingle Bells (refrään)':[64,64,64,64,64,64,64,67,60,62,64],
+  'Harjutus: C-duur toonika':[60,62,64,65,67,69,71,72,71,69,67,65,64,62,60]
+};
+function renderSong(){
+  const names=Object.keys(SONGS); S.song=S.song||names[0]; S.i=0; S.hint=S.hint!==false;
+  panel.innerHTML=`<div class="row"><select id="sel">${names.map(n=>`<option ${n===S.song?'selected':''}>${n}</option>`).join('')}</select>
+  <label><input type="checkbox" id="hintCb" ${S.hint?'checked':''}> Näita järgmist klahvi</label><button id="restart">Algusest</button></div>
+  <div class="chips" id="chips"></div><div class="msg" id="msg"></div>`;
+  $('sel').onchange=e=>{S.song=e.target.value;renderSong();};
+  $('hintCb').onchange=e=>{S.hint=e.target.checked;showNext();};
+  $('restart').onclick=()=>{S.i=0;showNext();setMsg('');};
+  showNext();
+}
+function showNext(){
+  const seq=SONGS[S.song]; clearNext();
+  $('chips').innerHTML=seq.map((m,i)=>`<span class="chip ${i<S.i?'done':i===S.i?'cur':''}">${NAMES[m%12]}</span>`).join('');
+  if(S.i<seq.length&&S.hint){keyEls[seq[S.i]].classList.add('next');}
+}
+
+/* --- Noodilugemine --- */
+function renderRead(){
+  S.clef=S.clef||'both'; S.streak=0; S.ok=0; S.tot=0; S.hintLet=!!S.hintLet;
+  panel.innerHTML=`<div class="row"><select id="clef"><option value="treble">Viiulivõti</option><option value="bass">Bassivõti</option><option value="both">Mõlemad</option></select>
+  <label><input type="checkbox" id="hl"> Näita noodi nime</label><span class="hint" id="score"></span></div>
+  <div id="staffbox"></div><div class="msg" id="msg"></div>
+  <div class="row letters" id="letters">${LET.map(l=>`<button data-l="${l}">${l}</button>`).join('')}</div>
+  <div class="hint">Vasta nuppudega, ekraaniklaviatuuril või päris klaveril (mikrofon). H = inglise B.</div>`;
+  $('clef').value=S.clef; $('clef').onchange=e=>{S.clef=e.target.value;newRead();};
+  $('hl').onchange=e=>{S.hintLet=e.target.checked;drawRead();};
+  $('letters').onclick=e=>{const b=e.target.closest('button'); if(b)handle(60+LET_PC[LET.indexOf(b.dataset.l)],'pc');};
+  newRead();
+}
+function newRead(){
+  const clef=S.clef==='both'?(Math.random()<.5?'treble':'bass'):S.clef;
+  // diatonic index d = octave*7+letter ; viiulivõti E4..G5 (30..39), bassivõti G2..E4 (18..30)
+  const lo=clef==='treble'?28:16, hi=clef==='treble'?39:30;
+  let d=lo+Math.floor(Math.random()*(hi-lo+1)); if(S.cur&&d===S.cur.d)d=d===hi?d-1:d+1;
+  const oct=Math.floor(d/7), l=d%7; S.cur={clef,d,midi:(oct+1)*12+LET_PC[l]};
+  drawRead(); updScore();
+}
+function updScore(){const s=$('score'); if(s)s.textContent=`Õigesti ${S.ok}/${S.tot} · seeria ${S.streak}`;}
+function drawRead(){
+  const {clef,d}=S.cur, step=10, top=50, bottomD=clef==='treble'?30:18; // alumine joon
+  const yOf=dd=>top+4*step-(dd-bottomD)*step/2;
+  let svg=`<svg class="staff" viewBox="0 0 420 200">`;
+  for(let i=0;i<5;i++)svg+=`<line x1="20" x2="400" y1="${top+i*step}" y2="${top+i*step}" stroke="#222" stroke-width="1.5"/>`;
+  svg+=`<text x="28" y="${top+4*step+2}" font-size="13" fill="#555">${clef==='treble'?'Viiulivõti (G)':'Bassivõti (F)'}</text>`;
+  const y=yOf(d), x=250;
+  // lisajooned
+  const botY=top+4*step, topY=top;
+  if(y>botY+step/2-1){for(let yy=botY+step;yy<=y+1;yy+=step)svg+=`<line x1="${x-18}" x2="${x+18}" y1="${yy}" y2="${yy}" stroke="#222" stroke-width="1.5"/>`;}
+  if(y<topY-step/2+1){for(let yy=topY-step;yy>=y-1;yy-=step)svg+=`<line x1="${x-18}" x2="${x+18}" y1="${yy}" y2="${yy}" stroke="#222" stroke-width="1.5"/>`;}
+  svg+=`<ellipse cx="${x}" cy="${y}" rx="8" ry="6" fill="#111" transform="rotate(-18 ${x} ${y})"/>`;
+  const up=y>(top+2*step); svg+=up?`<line x1="${x+7.5}" x2="${x+7.5}" y1="${y-1}" y2="${y-34}" stroke="#111" stroke-width="2"/>`:`<line x1="${x-7.5}" x2="${x-7.5}" y1="${y+1}" y2="${y+34}" stroke="#111" stroke-width="2"/>`;
+  if(S.hintLet)svg+=`<text x="${x+30}" y="${y+5}" font-size="16" font-weight="700" fill="#c33">${LET[d%7]}</text>`;
+  svg+='</svg>'; $('staffbox').innerHTML=svg;
+}
+
+/* --- Kuulmine --- */
+function renderEar(){
+  S.ok=0;S.tot=0;S.cur=null;
+  panel.innerHTML=`<div class="row"><button id="play">▶ Mängi noot</button><button id="again">↻ Korda</button><span class="hint" id="score"></span></div>
+  <div class="msg" id="msg">Vajuta „Mängi noot“ ja leia see klaviatuurilt.</div>
+  <div class="hint">Noodid C4–H4 (valged klahvid). Vasta ekraaniklaviatuuril või päris klaveril (mikrofon). Mikrofon on heli ajal korraks vait.</div>`;
+  $('play').onclick=()=>{const w=[60,62,64,65,67,69,71]; let m; do{m=w[Math.floor(Math.random()*w.length)];}while(S.cur&&m===S.cur.m); S.cur={m,fail:false}; tone(m,1.4); setMsg('Mis noot see oli?'); };
+  $('again').onclick=()=>{if(S.cur)tone(S.cur.m,1.4);};
+}
+
+/* ---------- sisendi käsitlemine ---------- */
+let busy=false;
+function handle(m,src){
+  $('det').textContent=NAMES[m%12];
+  if(busy)return;
+  if(mode==='song'){
+    const seq=SONGS[S.song]; if(S.i>=seq.length)return;
+    if(match(seq[S.i],m,src)){S.i++; flash(seq[S.i-1],'good'); showNext(); if(S.i>=seq.length){setMsg('🎉 Valmis! Hästi mängitud.','ok');clearNext();} else setMsg('');}
+    else {setMsg(`Kuulsin ${NAMES[m%12]}, oodatud ${NAMES[seq[S.i]%12]}`,'bad');}
+  }
+  if(mode==='read'&&S.cur){
+    const ok=(S.cur.midi%12)===(m%12); S.tot++;
+    if(ok){S.ok++;S.streak++;setMsg('✓ Õige! '+LET[S.cur.d%7],'ok');updScore();busy=true;setTimeout(()=>{busy=false;newRead();setMsg('');},700);}
+    else{S.streak=0;setMsg(`✗ See oli ${NAMES[m%12]}. Proovi uuesti.`,'bad');updScore();}
+  }
+  if(mode==='ear'&&S.cur){
+    if(match(S.cur.m,m,src)){S.tot++;if(!S.cur.fail)S.ok++;setMsg('✓ Õige! '+NAMES[S.cur.m%12],'ok');flash(S.cur.m,'good');S.cur=null;const s=$('score');s.textContent=`Esimesel katsel ${S.ok}/${S.tot}`;}
+    else{S.cur.fail=true;setMsg(`✗ See oli ${NAMES[m%12]}. Kuula uuesti ja proovi.`,'bad');flash(m,'bad');}
+  }
+}
+
+/* ---------- mikrofon + helikõrguse tuvastus (YIN) ---------- */
+let stream=null,an=null,buf=null,raf=0,micOn=false,cand=-1,candN=0,lastFired=-1,prevRms=0,minRms=1;
+const micBtn=$('micBtn');
+micBtn.onclick=async()=>{
+  if(micOn){stopMic();return;}
+  try{
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw new Error('nosupport');
+    stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+    const a=ctx(); const src=a.createMediaStreamSource(stream); an=a.createAnalyser(); an.fftSize=4096; src.connect(an); buf=new Float32Array(an.fftSize);
+    micOn=true; micBtn.classList.add('on'); micBtn.textContent='🎤 Mikrofon: sees'; $('micHint').textContent='Mängi üks noot korraga ja lase tal kõlada. Sama noodi kordamiseks löö klahvi uuesti.'; loop();
+  }catch(e){
+    $('micHint').textContent=(e.message==='nosupport'||!window.isSecureContext)
+      ?'Mikrofon ei tööta selles vaates. Ava see fail otse brauseris (Chrome/Safari) või https-lehelt.'
+      :'Mikrofoni luba puudub. Luba brauseris mikrofoni kasutamine ja proovi uuesti.';
+  }
+};
+function stopMic(){micOn=false;cancelAnimationFrame(raf);if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;micBtn.classList.remove('on');micBtn.textContent='🎤 Mikrofon: väljas';$('lvl').style.width='0';}
+function yin(b,sr){
+  const N=1024*2, maxT=Math.min(Math.floor(sr/65),N-1), minT=Math.floor(sr/1100);
+  const d=new Float32Array(maxT+1);
+  for(let t=1;t<=maxT;t++){let s=0;for(let i=0;i<N;i++){const x=b[i]-b[i+t];s+=x*x;}d[t]=s;}
+  let run=0; const cm=new Float32Array(maxT+1); cm[0]=1;
+  for(let t=1;t<=maxT;t++){run+=d[t];cm[t]=d[t]*t/(run||1);}
+  let tau=-1;
+  for(let t=minT;t<=maxT;t++){ if(cm[t]<0.12){ while(t+1<=maxT&&cm[t+1]<cm[t])t++; tau=t;break; } }
+  if(tau<0)return -1;
+  const a=cm[tau-1]||cm[tau],c=cm[tau+1]||cm[tau],bq=cm[tau]; const den=2*(2*bq-c-a); const sh=den?(c-a)/den:0;
+  return sr/(tau+sh);
+}
+function loop(){
+  if(!micOn)return; raf=requestAnimationFrame(loop);
+  const now=performance.now(); if(loop.t&&now-loop.t<45)return; loop.t=now;
+  an.getFloatTimeDomainData(buf); let s=0; for(let i=0;i<buf.length;i++)s+=buf[i]*buf[i]; const rms=Math.sqrt(s/buf.length);
+  $('lvl').style.width=Math.min(100,rms*600)+'%';
+  if(now<mutedUntil){cand=-1;candN=0;prevRms=rms;return;}
+  if(rms<0.008){cand=-1;candN=0;lastFired=-1;prevRms=rms;minRms=1;return;}
+  if(rms>prevRms*1.6&&rms>0.02)lastFired=-1; // uus löök
+  prevRms=rms*0.5+prevRms*0.5;
+  const f=yin(buf,ac.sampleRate); if(f<0){cand=-1;candN=0;return;}
+  const m=Math.round(69+12*Math.log2(f/440)); if(m<36||m>96)return;
+  if(m===cand)candN++; else {cand=m;candN=1;}
+  if(candN>=3&&m!==lastFired){lastFired=m; $('det').textContent=nm(m); fireMic(m);}
+}
+function fireMic(m){
+  // kuva klaviatuuril oktavit kokku voltides
+  let k=m; while(k<START)k+=12; while(k>END)k-=12; flash(k,'act');
+  handle(m,'mic');
+}
+render();
+</script>
+</body>
+</html>
